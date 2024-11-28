@@ -1,0 +1,86 @@
+import numpy as np
+import csv
+from elasticsearch import Elasticsearch
+import unittest
+
+
+es = Elasticsearch("http://localhost:9200")
+
+
+def create_index(index_name):
+    mappings = {
+        "mappings": {
+            "properties": {
+                "score": {"type": "integer"}
+            }
+        }
+    }
+    if not es.indices.exists(index=index_name):
+        es.indices.create(index=index_name, body=mappings)
+
+
+def populate_index_from_csv(index_name, filename):
+    with open(filename, mode='r') as file:
+        reader = csv.reader(file)
+        scores = next(reader)
+        for score in scores:
+            es.index(index=index_name, document={"score": int(score)})
+
+
+def read_scores_from_index(index_name):
+    query = {"query": {"match_all": {}}}
+    response = es.search(index=index_name, body=query, size=10000)
+    return [hit["_source"]["score"] for hit in response["hits"]["hits"]]
+
+
+def generate_random_data(mean, variance, num_samples, filename):
+    data = np.random.randint(max(mean - variance, 0), min(mean + variance + 1, 90), num_samples)
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(data)
+
+
+def department_threat_score(index_name):
+    scores = read_scores_from_index(index_name)
+    return np.mean(scores)
+
+
+def aggregated_threat_score(department_indices):
+    department_scores = [department_threat_score(index) for index in department_indices]
+    return min(max(np.mean(department_scores), 0), 90)
+
+
+# Unit tests
+class TestCyberSecurityScore(unittest.TestCase):
+    def setUp(self):
+        generate_random_data(45, 10, 100, 'test_data.csv')
+        create_index("dept_test")
+        populate_index_from_csv("dept_test", 'test_data.csv')
+
+        for idx in ["dept1", "dept2"]:
+            generate_random_data(30, 5, 50, f'{idx}_data.csv')
+            create_index(idx)
+            populate_index_from_csv(idx, f'{idx}_data.csv')
+
+    def test_department_threat_score(self):
+        score = department_threat_score("dept_test")
+        self.assertTrue(0 <= score <= 90)
+
+    def test_aggregated_threat_score(self):
+        department_indices = ["dept1", "dept2"]
+        agg_score = aggregated_threat_score(department_indices)
+        self.assertTrue(0 <= agg_score <= 90)
+
+
+if __name__ == '__main__':
+    print("Generating random data and populating Elasticsearch...")
+    generate_random_data(45, 10, 100, 'test_data.csv')
+    create_index("dept_test")
+    populate_index_from_csv("dept_test", 'test_data.csv')
+
+    for idx in ["dept1", "dept2"]:
+        generate_random_data(30, 5, 50, f'{idx}_data.csv')
+        create_index(idx)
+        populate_index_from_csv(idx, f'{idx}_data.csv')
+
+    unittest.main()
