@@ -1,0 +1,60 @@
+import numpy as np
+
+def generate_random_data(mean, variance, num_samples):
+    return np.random.randint(max(mean - variance, 0), min(mean + variance + 1, 90), num_samples)
+
+def department_threat_score(threat_scores):
+    return np.mean(threat_scores)
+
+def aggregated_threat_score(departments_data):
+    department_scores = [department_threat_score(dept['scores']) for dept in departments_data]
+    aggregated_score = np.mean(department_scores)
+    return min(max(aggregated_score, 0), 90)
+
+import unittest
+from task_2 import generate_random_data, department_threat_score, aggregated_threat_score
+
+class TestCyberSecurityScore(unittest.TestCase):
+    def test_generate_random_data(self):
+        data = generate_random_data(mean=45, variance=10, num_samples=100)
+        self.assertTrue(all(0 <= score <= 90 for score in data))
+
+    def test_department_threat_score(self):
+        self.assertEqual(department_threat_score([10, 20, 30]), 20)
+
+    def test_aggregated_threat_score_balanced(self):
+        departments_data = [
+            {'scores': generate_random_data(30, 5, 50)},
+            {'scores': generate_random_data(30, 5, 50)},
+            {'scores': generate_random_data(30, 5, 50)}
+        ]
+        score = aggregated_threat_score(departments_data)
+        self.assertAlmostEqual(score, 30, delta=5)
+
+    def test_aggregated_threat_score_high_outlier(self):
+        departments_data = [
+            {'scores': generate_random_data(20, 5, 50)},
+            {'scores': generate_random_data(60, 5, 50)}
+        ]
+        score = aggregated_threat_score(departments_data)
+        self.assertTrue(score > 35)
+
+    def test_aggregated_threat_score_internal_high_user(self):
+        departments_data = [
+            {'scores': generate_random_data(20, 5, 50)},
+            {'scores': [5, 5, 5, 90]}  # Department with one very high user score
+        ]
+        score = aggregated_threat_score(departments_data)
+        self.assertTrue(score >= 20)
+
+    def test_aggregated_threat_score_different_sizes(self):
+        departments_data = [
+            {'scores': generate_random_data(25, 10, 100)},
+            {'scores': generate_random_data(40, 10, 30)},
+            {'scores': generate_random_data(50, 10, 10)}
+        ]
+        score = aggregated_threat_score(departments_data)
+        self.assertTrue(0 <= score <= 90)
+
+if __name__ == '__main__':
+    unittest.main()
